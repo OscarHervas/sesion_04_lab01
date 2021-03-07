@@ -1,0 +1,138 @@
+---
+- name: "instalacion y configuracion servicio web en nodos"
+  hosts: nodo1
+  tasks:
+    - name: "Instalamos el Apache"
+      yum:
+        name: httpd
+        state: present
+
+    - name: "Mensaje"
+      debug:
+        msg: "Instalacion y configuracion servicio web"
+
+    - name: "habilitar firewalld on reboot"    
+      service:
+        name: firewalld
+        enabled: yes
+
+    - name: "habilitar en el firewall https"
+      firewalld:
+        service: https
+        zone: public
+        permanent: yes
+        immediate: yes
+        state: enabled
+
+    - name: "habilitar en el firewall http"
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+
+    - name: "Re-load el firewall"
+      service:
+        name: firewalld
+        state: restarted
+        when: firewalld.changed
+  
+- name: "Arrancar servicio httpd en master"
+  hosts: master
+  tasks:
+    - name: "arrancar apache"
+      firewalld:
+        name: httpd
+        state: started
+
+    - name: "Deshabilitar selinux"
+      selinux:
+        policy: targered
+        state: disabled
+
+    - name: "crear  directorio html"
+      file:
+        path: "/var/www/example.com/html"
+        owner: root
+        group: root
+        state: directory
+        mode: '0755'
+    
+    - name: "crear directorio log"
+      file:
+        path: "/var/www/example.com/log"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: "Cambiar propietario y grupo del directorio wwww"
+      file:
+        path: "/var/www"
+        mode: '0755'
+        recurse: yes
+      
+    - name: "Crear file index.html"
+      file:
+        path: /var/www/example.com/html/index.html
+        state: touch
+        mode: 0765
+        owner: ansible
+        group: ansible
+
+    - name: "Insertar lineas en file index"
+      blockinfile:
+        path: /var/www/example.com/html/index.html
+        block: |
+          <html>
+          <head>
+          <title>Welcome</title>
+          </head>
+          <body>
+          <h1> Exito chaval</h1>
+          </body>
+          </html>
+
+    - name: "crear directorio /etc/thhpd/sites-available"
+      file:
+        path: "/etc/thhpd/sites-available"
+        state: directory
+        mode: '0755'
+
+    - name: "crear directorio /etc/thhpd/sites-enabled"
+      file:
+        path: "/etc/thhpd/sites-enabled"
+        state: directory
+        mode: '0755'
+
+    - name: "Anadir linea al final del file httpd.conf"
+      lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        line: "IncludeOptional sites-enabled/*.conf"
+    
+    - name: "Crear file example.com.conf"
+      file:
+        path: /etc/httpd/sites-available/example.com.conf
+        state: touch
+        mode: 0765
+        owner: root
+        group: root
+
+    - name: "Insertar lineas en file example.com.conf"
+      blockinfile:
+        path: /var/www/example.com/html/index.html
+        block: |
+          <VirtualHost *:80>
+          ServerName www.example.com
+          ServerAlias example.com
+          DocumentRoot /var/www/example.com/html
+          ErrorLog /var/www/example.com/log/error.log
+          CustomLog /var/www/example.com/log/requests.log combined
+          </VirtualHost>
+
+    - name: Create a symbolic link
+      file:
+        src: /etc/httpd/sites-available/example.com.conf
+        dest: /etc/httpd/sites-enabled/example.com.conf
+        owner: root
+        group: root
+        state: link
